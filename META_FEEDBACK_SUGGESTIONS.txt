@@ -1,0 +1,59 @@
+Subject: Quest Link incorrectly marks new high-end PC as unsupported and may fail wired Link startup
+
+Hello Meta Quest Link team,
+
+I am reporting a compatibility and startup issue with Meta Horizon Link on a new high-end laptop.
+
+Hardware:
+- CPU: Intel(R) Core(TM) Ultra 9 275HX
+- GPU: NVIDIA GeForce RTX 5080 Laptop GPU
+- GPU PCI device ID: VEN_10DE&DEV_2C59
+- NVIDIA driver version observed: 32.0.16.1062
+- OS: Windows 11, build 26200
+- Headset: Quest 3 over USB 3 wired Link
+
+Observed symptoms:
+1. Meta Horizon Link shows that the PC does not meet the minimum requirements even though the hardware is far above the Link requirements.
+2. Local logs show the CPU as UNSUPPORTED_CLASS:
+   - Intel(R) Core(TM) Ultra 9 275HX
+3. Local logs also show the GPU result as FAIL even though the GPU is detected as:
+   - NVIDIA GeForce RTX 5080 Laptop GPU
+4. The desktop RTX 5080 device ID appears to be covered by the compatibility data, but the laptop RTX 5080 device ID DEV_2C59 is not handled correctly.
+5. Wired Link could connect briefly and then exit back to the headset environment.
+
+Additional runtime findings:
+- Meta Horizon Link depends on the highwind package/service for the current Link startup path.
+- After update/reinstall, highwind_service.exe was not always started automatically.
+- Starting highwind_service.exe manually allowed the Link initialization path to continue.
+- With the previous Link encoder settings, the service log showed:
+  nvEncInitializeEncoder failed with nvStatus 8
+- The failing configuration was AVC/H.264 with old manual Link tuning values.
+- Resetting Link encoder registry values and using HEVC fixed the encoder startup failure:
+  HEVC=1
+  BitrateMbps=0
+  EncodeWidth=0
+  DBR=0
+
+Suggested fixes:
+1. Update the PC compatibility database for Intel Core Ultra 9 275HX.
+2. Update the PC compatibility database for NVIDIA GeForce RTX 5080 Laptop GPU, PCI device ID DEV_2C59.
+3. Make the compatibility classifier treat newer CPU/GPU generations as compatible when they clearly exceed the minimum requirements instead of hard-failing as UNSUPPORTED_CLASS.
+4. If the compatibility database is stale, show a warning banner only; do not block or degrade Link startup.
+5. Ensure the highwind package is always installed and highwind_service.exe is started or supervised by the Meta runtime after update/reinstall.
+6. Improve Link encoder startup fallback:
+   - If AVC/H.264 NVENC initialization fails, retry HEVC automatically when supported.
+   - If stored Link tuning values are invalid or stale, reset to safe defaults before failing the session.
+7. Add a visible "reset Link encoder settings" option in Meta Horizon Link settings.
+8. Include the detected CPU model, GPU model, PCI device ID, selected codec, bitrate, encode width, and exact encoder failure reason in user-facing diagnostics.
+
+Local workaround that resolved the issue:
+- Add Intel(R) Core(TM) Ultra 9 275HX to the local CPU compatibility lists.
+- Add NVIDIA GeForce RTX 5080 Laptop GPU DEV_2C59 to the local GPU compatibility lists.
+- Reset Link encoder values to HEVC defaults:
+  HEVC=1
+  BitrateMbps=0
+  EncodeWidth=0
+  DBR=0
+- Start highwind_service.exe when it is not running.
+
+Please update the official compatibility database and Link startup logic so this workaround is no longer needed.
