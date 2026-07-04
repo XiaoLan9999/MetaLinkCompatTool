@@ -17,6 +17,11 @@ Windows GUI helper for Meta Horizon / Quest Link compatibility recovery.
   - `BitrateMbps=0`
   - `EncodeWidth=0`
   - `DBR=0`
+- Adds a separate Tools page for Meta / Oculus Debug Tool helpers:
+  - Link bitrate, encode width, HEVC, and dynamic bitrate registry tuning.
+  - A 120 Hz-oriented Quest Link preset (`HEVC=1`, `BitrateMbps=500`, `EncodeWidth=0`, `DBR=0`).
+  - Oculus Debug Tool launch button.
+  - Oculus Debug Tool CLI runtime commands for pixel density override, ASW mode, and output color space.
 - Can stop/restart Meta runtime services and related processes.
 - Can start `highwind_service.exe`.
 - Can install/remove a current-user startup entry that starts highwind silently.
@@ -25,6 +30,8 @@ Windows GUI helper for Meta Horizon / Quest Link compatibility recovery.
 ## Notes
 
 This is not a system-wide hardware spoofer. It only modifies Meta Horizon Link's local compatibility inputs and current-user Link encoder settings.
+
+The 120 Hz headset refresh-rate toggle is still controlled by Meta's device graphics settings. The tool only provides Link streaming parameters and Debug Tool calls that are convenient for a 120 Hz setup.
 
 Writing to Program Files and stopping `OVRService` require administrator rights. The app prompts to relaunch elevated when needed.
 

@@ -30,6 +30,24 @@ public static class MetaPaths
         "oculus-client",
         "OculusClient.exe");
 
+    public static string ClientExe => Path.Combine(
+        MetaRoot,
+        "Support",
+        "oculus-client",
+        "Client.exe");
+
+    public static string OculusDebugToolExe => Path.Combine(
+        MetaRoot,
+        "Support",
+        "oculus-diagnostics",
+        "OculusDebugTool.exe");
+
+    public static string OculusDebugToolCliExe => Path.Combine(
+        MetaRoot,
+        "Support",
+        "oculus-diagnostics",
+        "OculusDebugToolCLI.exe");
+
     public static string AppDataRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "MetaLinkCompatTool");

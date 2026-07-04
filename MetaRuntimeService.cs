@@ -91,14 +91,15 @@ public static class MetaRuntimeService
 
     public static void LaunchMetaClient()
     {
-        if (!File.Exists(MetaPaths.OculusClientExe))
+        var client = File.Exists(MetaPaths.ClientExe) ? MetaPaths.ClientExe : MetaPaths.OculusClientExe;
+        if (!File.Exists(client))
         {
-            throw new FileNotFoundException("OculusClient.exe was not found.", MetaPaths.OculusClientExe);
+            throw new FileNotFoundException("Meta client executable was not found.", client);
         }
 
-        Process.Start(new ProcessStartInfo(MetaPaths.OculusClientExe)
+        Process.Start(new ProcessStartInfo(client)
         {
-            WorkingDirectory = Path.GetDirectoryName(MetaPaths.OculusClientExe),
+            WorkingDirectory = Path.GetDirectoryName(client),
             UseShellExecute = true
         });
     }

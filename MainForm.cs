@@ -19,19 +19,38 @@ public sealed class MainForm : Form
     private readonly Dictionary<string, Control> _localizedControls = new();
     private readonly List<Button> _operationButtons = new();
 
+    private readonly TabControl _tabs = new();
+    private readonly TabPage _dashboardTab = new();
+    private readonly TabPage _toolsTab = new();
     private readonly Panel _scrollHost = new();
+    private readonly Panel _toolsScrollHost = new();
     private readonly TableLayoutPanel _content = new();
+    private readonly TableLayoutPanel _toolsContent = new();
     private readonly Label _adminLabel = new();
     private readonly Label _cpuLabel = new();
     private readonly Label _gpuDetailLabel = new();
     private readonly Label _runtimeLabel = new();
+    private readonly Label _linkSettingsLabel = new();
     private readonly ComboBox _gpuCombo = new();
     private readonly ComboBox _backupCombo = new();
     private readonly ComboBox _languageCombo = new();
+    private readonly ComboBox _aswCombo = new();
+    private readonly ComboBox _colorSpaceCombo = new();
     private readonly TextBox _compatStatusBox = new();
     private readonly TextBox _logBox = new();
+    private readonly TextBox _toolsLogBox = new();
     private readonly CheckBox _lockLocalCheck = new();
     private readonly CheckBox _encoderDefaultsCheck = new();
+    private readonly CheckBox _hevcCheck = new();
+    private readonly CheckBox _dynamicBitrateCheck = new();
+    private readonly NumericUpDown _bitrateBox = new();
+    private readonly NumericUpDown _encodeWidthBox = new();
+    private readonly NumericUpDown _pixelsPerDisplayPixelBox = new();
+
+    private sealed record OptionItem(string Value, string Text)
+    {
+        public override string ToString() => Text;
+    }
 
     public MainForm()
     {
@@ -62,10 +81,27 @@ public sealed class MainForm : Form
 
     private void BuildUi()
     {
+        _tabs.Dock = DockStyle.Fill;
+        _tabs.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold);
+        _tabs.Padding = new Point(16, 6);
+        Controls.Add(_tabs);
+
+        _dashboardTab.BackColor = _bg;
+        _dashboardTab.Padding = new Padding(0);
+        _dashboardTab.UseVisualStyleBackColor = false;
+        Bind(_dashboardTab, "TabDashboard");
+        _tabs.TabPages.Add(_dashboardTab);
+
+        _toolsTab.BackColor = _bg;
+        _toolsTab.Padding = new Padding(0);
+        _toolsTab.UseVisualStyleBackColor = false;
+        Bind(_toolsTab, "TabTools");
+        _tabs.TabPages.Add(_toolsTab);
+
         _scrollHost.Dock = DockStyle.Fill;
         _scrollHost.AutoScroll = true;
         _scrollHost.BackColor = _bg;
-        Controls.Add(_scrollHost);
+        _dashboardTab.Controls.Add(_scrollHost);
 
         _content.ColumnCount = 1;
         _content.RowCount = 3;
@@ -80,6 +116,28 @@ public sealed class MainForm : Form
         _content.Controls.Add(BuildHeader(), 0, 0);
         _content.Controls.Add(BuildBody(), 0, 1);
         _content.Controls.Add(BuildLogCard(), 0, 2);
+
+        _toolsScrollHost.Dock = DockStyle.Fill;
+        _toolsScrollHost.AutoScroll = true;
+        _toolsScrollHost.BackColor = _bg;
+        _toolsTab.Controls.Add(_toolsScrollHost);
+
+        _toolsContent.ColumnCount = 1;
+        _toolsContent.RowCount = 4;
+        _toolsContent.AutoSize = false;
+        _toolsContent.Padding = new Padding(18);
+        _toolsContent.BackColor = _bg;
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 360));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 260));
+        _toolsScrollHost.Controls.Add(_toolsContent);
+        _toolsContent.Controls.Add(BuildToolIntroCard(), 0, 0);
+        _toolsContent.Controls.Add(BuildToolBody(), 0, 1);
+        _toolsContent.Controls.Add(BuildFeedbackCard(), 0, 2);
+        _toolsContent.Controls.Add(BuildToolLogCard(), 0, 3);
+
+        LoadToolChoices();
         ResizeScrollContent();
     }
 
@@ -89,6 +147,9 @@ public sealed class MainForm : Form
         _content.Size = new Size(
             Math.Max(980, _scrollHost.ClientSize.Width - scrollbarAllowance),
             1092);
+        _toolsContent.Size = new Size(
+            Math.Max(980, _toolsScrollHost.ClientSize.Width - scrollbarAllowance),
+            916);
     }
 
     private Control BuildHeader()
@@ -290,7 +351,7 @@ public sealed class MainForm : Form
         AddActionButton(layout, "InstallAutostart", Color.FromArgb(148, 210, 130), 0, 3, InstallAutostartClicked);
         AddActionButton(layout, "RemoveAutostart", Color.FromArgb(185, 145, 255), 1, 3, RemoveAutostartClicked);
         AddActionButton(layout, "SetEncoder", Color.FromArgb(120, 205, 210), 0, 4, SetEncoderDefaultsClicked);
-        AddActionButton(layout, "OpenFeedback", Color.FromArgb(120, 205, 210), 1, 4, OpenFeedbackClicked);
+        layout.SetColumnSpan(layout.GetControlFromPosition(0, 4)!, 2);
 
         var options = new FlowLayoutPanel
         {
@@ -363,6 +424,228 @@ public sealed class MainForm : Form
         _logBox.ForeColor = _text;
         _logBox.Font = new Font("Consolas", 9.5F);
         body.Controls.Add(_logBox);
+        return card;
+    }
+
+    private Control BuildToolIntroCard()
+    {
+        var card = CreateCard("DebugTools", out var body);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = _card
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+
+        var intro = new Label
+        {
+            Dock = DockStyle.Fill,
+            ForeColor = _muted,
+            Font = new Font("Segoe UI", 9.5F),
+            TextAlign = ContentAlignment.TopLeft
+        };
+        Bind(intro, "DebugToolsIntro");
+        layout.Controls.Add(intro, 0, 0);
+
+        var note = new Label
+        {
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(255, 206, 110),
+            Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        };
+        Bind(note, "RefreshRateNote");
+        layout.Controls.Add(note, 0, 1);
+        body.Controls.Add(layout);
+        return card;
+    }
+
+    private Control BuildToolBody()
+    {
+        var body = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = _bg
+        };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        body.Controls.Add(BuildLinkTuningCard(), 0, 0);
+        body.Controls.Add(BuildDebugToolCard(), 1, 0);
+        return body;
+    }
+
+    private Control BuildLinkTuningCard()
+    {
+        var card = CreateCard("LinkTuning", out var body);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = _card
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+
+        _linkSettingsLabel.Dock = DockStyle.Fill;
+        _linkSettingsLabel.ForeColor = _muted;
+        _linkSettingsLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _linkSettingsLabel.AutoEllipsis = true;
+        layout.Controls.Add(_linkSettingsLabel, 0, 0);
+
+        var settings = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 4,
+            BackColor = _card
+        };
+        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        for (var i = 0; i < 4; i++)
+        {
+            settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        }
+
+        StyleCheck(_hevcCheck);
+        AddSettingRow(settings, 0, "HevcCodec", _hevcCheck);
+        ConfigureNumeric(_bitrateBox, 0, 960, 25, 0);
+        AddSettingRow(settings, 1, "BitrateMbps", _bitrateBox);
+        ConfigureNumeric(_encodeWidthBox, 0, 5000, 16, 0);
+        AddSettingRow(settings, 2, "EncodeWidth", _encodeWidthBox);
+        StyleCheck(_dynamicBitrateCheck);
+        AddSettingRow(settings, 3, "DynamicBitrate", _dynamicBitrateCheck);
+        layout.Controls.Add(settings, 0, 1);
+
+        var buttons = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            BackColor = _card
+        };
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        AddActionButton(buttons, "ApplyLinkSettings", _accent, 0, 0, ApplyLinkSettingsClicked);
+        AddActionButton(buttons, "Apply120Preset", Color.FromArgb(148, 210, 130), 1, 0, Apply120PresetClicked);
+        AddActionButton(buttons, "ResetLinkDefaults", Color.FromArgb(185, 145, 255), 0, 1, ResetLinkDefaultsClicked);
+        AddActionButton(buttons, "RefreshToolSettings", _card2, 1, 1, RefreshToolSettingsClicked);
+        layout.Controls.Add(buttons, 0, 2);
+
+        body.Controls.Add(layout);
+        return card;
+    }
+
+    private Control BuildDebugToolCard()
+    {
+        var card = CreateCard("OdtRuntime", out var body);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = _card
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+
+        var settings = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            BackColor = _card
+        };
+        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
+        for (var i = 0; i < 3; i++)
+        {
+            settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        }
+
+        ConfigureNumeric(_pixelsPerDisplayPixelBox, 0, 2, 0.05M, 2);
+        AddSettingRow(settings, 0, "PixelsOverride", _pixelsPerDisplayPixelBox);
+        StyleCombo(_aswCombo);
+        AddSettingRow(settings, 1, "AswMode", _aswCombo);
+        StyleCombo(_colorSpaceCombo);
+        AddSettingRow(settings, 2, "OutputColorSpace", _colorSpaceCombo);
+        layout.Controls.Add(settings, 0, 0);
+
+        var buttons = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            BackColor = _card
+        };
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        AddActionButton(buttons, "LaunchDebugTool", Color.FromArgb(130, 185, 255), 0, 0, LaunchDebugToolClicked);
+        AddActionButton(buttons, "ApplyOdtRuntime", _accent2, 1, 0, ApplyOdtRuntimeClicked);
+        AddActionButton(buttons, "KillMeta", Color.FromArgb(255, 110, 120), 0, 1, KillMetaClicked);
+        AddActionButton(buttons, "RestartMeta", _accent, 1, 1, RestartMetaClicked);
+        layout.Controls.Add(buttons, 0, 1);
+
+        body.Controls.Add(layout);
+        return card;
+    }
+
+    private Control BuildFeedbackCard()
+    {
+        var card = CreateCard("FeedbackCard", out var body);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = _card
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+
+        var text = new Label
+        {
+            Dock = DockStyle.Fill,
+            ForeColor = _muted,
+            Font = new Font("Segoe UI", 9.5F),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        Bind(text, "FeedbackHint");
+        layout.Controls.Add(text, 0, 0);
+
+        var open = CreateButton("", Color.FromArgb(120, 205, 210));
+        Bind(open, "OpenFeedback");
+        open.Click += OpenFeedbackClicked;
+        layout.Controls.Add(open, 1, 0);
+
+        body.Controls.Add(layout);
+        return card;
+    }
+
+    private Control BuildToolLogCard()
+    {
+        var card = CreateCard("ToolLog", out var body);
+        _toolsLogBox.Dock = DockStyle.Fill;
+        _toolsLogBox.Multiline = true;
+        _toolsLogBox.ReadOnly = true;
+        _toolsLogBox.ScrollBars = ScrollBars.Both;
+        _toolsLogBox.WordWrap = false;
+        _toolsLogBox.BorderStyle = BorderStyle.None;
+        _toolsLogBox.BackColor = _card;
+        _toolsLogBox.ForeColor = _text;
+        _toolsLogBox.Font = new Font("Consolas", 9.5F);
+        body.Controls.Add(_toolsLogBox);
         return card;
     }
 
@@ -463,6 +746,71 @@ public sealed class MainForm : Form
         check.Margin = new Padding(4, 4, 18, 4);
     }
 
+    private void ConfigureNumeric(NumericUpDown numeric, decimal min, decimal max, decimal increment, int decimalPlaces)
+    {
+        numeric.Dock = DockStyle.Fill;
+        numeric.Minimum = min;
+        numeric.Maximum = max;
+        numeric.Increment = increment;
+        numeric.DecimalPlaces = decimalPlaces;
+        numeric.BackColor = _card2;
+        numeric.ForeColor = _text;
+        numeric.BorderStyle = BorderStyle.FixedSingle;
+        numeric.Font = new Font("Segoe UI", 9.5F);
+        numeric.Margin = new Padding(2, 4, 2, 6);
+    }
+
+    private void AddSettingRow(TableLayoutPanel layout, int row, string labelKey, Control input)
+    {
+        var label = CreateMutedLabel("");
+        label.TextAlign = ContentAlignment.MiddleLeft;
+        Bind(label, labelKey);
+        layout.Controls.Add(label, 0, row);
+        layout.Controls.Add(input, 1, row);
+    }
+
+    private void LoadToolChoices()
+    {
+        var selectedAsw = (_aswCombo.SelectedItem as OptionItem)?.Value ?? "nochange";
+        var selectedColor = (_colorSpaceCombo.SelectedItem as OptionItem)?.Value ?? "-1";
+
+        _aswCombo.DataSource = new List<OptionItem>
+        {
+            new("nochange", T("ChoiceNoChange")),
+            new("default", T("AswDefault")),
+            new("off", T("AswOff")),
+            new("auto", T("AswAuto")),
+            new("force", T("AswForce"))
+        };
+        SelectOption(_aswCombo, selectedAsw);
+
+        _colorSpaceCombo.DataSource = new List<OptionItem>
+        {
+            new("-1", T("ChoiceNoChange")),
+            new("0", T("ColorNone")),
+            new("1", T("ColorDciP3")),
+            new("2", T("ColorSrgb"))
+        };
+        SelectOption(_colorSpaceCombo, selectedColor);
+    }
+
+    private static void SelectOption(ComboBox combo, string value)
+    {
+        foreach (var item in combo.Items)
+        {
+            if (item is OptionItem option && string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (combo.Items.Count > 0)
+        {
+            combo.SelectedIndex = 0;
+        }
+    }
+
     private void Bind(Control control, string key)
     {
         control.Tag = key;
@@ -480,6 +828,7 @@ public sealed class MainForm : Form
             }
         }
 
+        LoadToolChoices();
         _adminLabel.Text = Elevation.IsAdministrator() ? T("Admin") : T("Standard");
         _adminLabel.ForeColor = Elevation.IsAdministrator() ? _accent2 : Color.FromArgb(255, 206, 110);
         if (_hardware is null)
@@ -509,6 +858,7 @@ public sealed class MainForm : Form
             UpdateGpuDetails();
             RefreshStatus();
             RefreshBackups();
+            RefreshToolSettings();
             Log(T("StatusRefreshed"));
         }
         catch (Exception ex)
@@ -560,6 +910,23 @@ public sealed class MainForm : Form
         var backups = BackupStore.Load().ToList();
         _backupCombo.DataSource = backups;
         _backupCombo.DisplayMember = nameof(BackupSet.DisplayName);
+    }
+
+    private void RefreshToolSettings()
+    {
+        try
+        {
+            var settings = DebugToolService.ReadLinkSettings();
+            _hevcCheck.Checked = settings.Hevc;
+            _dynamicBitrateCheck.Checked = settings.DynamicBitrate;
+            _bitrateBox.Value = Math.Min(_bitrateBox.Maximum, Math.Max(_bitrateBox.Minimum, settings.BitrateMbps));
+            _encodeWidthBox.Value = Math.Min(_encodeWidthBox.Maximum, Math.Max(_encodeWidthBox.Minimum, settings.EncodeWidth));
+            _linkSettingsLabel.Text = DebugToolService.GetLinkSettingsStatus();
+        }
+        catch (Exception ex)
+        {
+            _linkSettingsLabel.Text = $"{T("RefreshFailed")}: {ex.Message}";
+        }
     }
 
     private void UpdateGpuDetails()
@@ -697,6 +1064,67 @@ public sealed class MainForm : Form
         });
     }
 
+    private void ApplyLinkSettingsClicked(object? sender, EventArgs e)
+    {
+        var settings = ReadLinkSettingsFromUi();
+        RunOperation(T("ApplyLinkSettings"), T("LinkSettingsApplied"), () =>
+        {
+            var backup = DebugToolService.ApplyLinkSettings(settings);
+            return BuildLinkSettingMessages(settings, backup);
+        });
+    }
+
+    private void Apply120PresetClicked(object? sender, EventArgs e)
+    {
+        var settings = DebugToolService.HighRefreshPreset;
+        RunOperation(T("Apply120Preset"), T("PresetApplied"), () =>
+        {
+            var backup = DebugToolService.ApplyLinkSettings(settings);
+            return BuildLinkSettingMessages(settings, backup).Concat([T("RefreshRateNote")]);
+        });
+    }
+
+    private void ResetLinkDefaultsClicked(object? sender, EventArgs e)
+    {
+        var settings = DebugToolService.SafeDefaults;
+        RunOperation(T("ResetLinkDefaults"), T("LinkDefaultsReset"), () =>
+        {
+            var backup = DebugToolService.ApplyLinkSettings(settings);
+            return BuildLinkSettingMessages(settings, backup);
+        });
+    }
+
+    private void RefreshToolSettingsClicked(object? sender, EventArgs e)
+    {
+        RefreshToolSettings();
+        Log(T("ToolSettingsRefreshed"));
+    }
+
+    private void LaunchDebugToolClicked(object? sender, EventArgs e)
+    {
+        RunOperation(T("LaunchDebugTool"), T("DebugToolLaunch"), () =>
+        {
+            DebugToolService.LaunchOculusDebugTool();
+            return [T("DebugToolLaunch")];
+        });
+    }
+
+    private void ApplyOdtRuntimeClicked(object? sender, EventArgs e)
+    {
+        var pixels = _pixelsPerDisplayPixelBox.Value;
+        var asw = (_aswCombo.SelectedItem as OptionItem)?.Value ?? "nochange";
+        var colorText = (_colorSpaceCombo.SelectedItem as OptionItem)?.Value ?? "-1";
+        var color = int.TryParse(colorText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedColor)
+            ? parsedColor
+            : -1;
+
+        RunOperation(T("ApplyOdtRuntime"), T("OdtRuntimeApplied"), () =>
+        {
+            var output = DebugToolService.RunRuntimeCommands(pixels, asw, color);
+            return [T("OdtRuntimeApplied"), output];
+        });
+    }
+
     private void OpenFeedbackClicked(object? sender, EventArgs e)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "META_FEEDBACK_SUGGESTIONS.txt");
@@ -705,6 +1133,24 @@ public sealed class MainForm : Form
             path = Path.Combine(Directory.GetCurrentDirectory(), "META_FEEDBACK_SUGGESTIONS.txt");
         }
         OpenPath(path);
+    }
+
+    private LinkSettings ReadLinkSettingsFromUi()
+    {
+        return new LinkSettings(
+            Hevc: _hevcCheck.Checked,
+            BitrateMbps: (int)_bitrateBox.Value,
+            EncodeWidth: (int)_encodeWidthBox.Value,
+            DynamicBitrate: _dynamicBitrateCheck.Checked);
+    }
+
+    private IEnumerable<string> BuildLinkSettingMessages(LinkSettings settings, string backup)
+    {
+        yield return $"HEVC={(settings.Hevc ? 1 : 0)}  BitrateMbps={settings.BitrateMbps}  EncodeWidth={settings.EncodeWidth}  DBR={(settings.DynamicBitrate ? 1 : 0)}";
+        if (!string.IsNullOrWhiteSpace(backup))
+        {
+            yield return $"{T("RegistryBackup")}: {backup}";
+        }
     }
 
     private void RunOperation(string started, string completed, Func<IEnumerable<string>> work)
@@ -724,6 +1170,7 @@ public sealed class MainForm : Form
                     }
                     RefreshStatus();
                     RefreshBackups();
+                    RefreshToolSettings();
                     Log(completed);
                 });
             }
@@ -778,7 +1225,9 @@ public sealed class MainForm : Form
 
     private void Log(string message)
     {
-        _logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+        var line = $"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}";
+        _logBox.AppendText(line);
+        _toolsLogBox.AppendText(line);
     }
 
     private void ShowError(string title, Exception ex)
