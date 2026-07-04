@@ -5,6 +5,8 @@ Windows GUI helper for Meta Horizon / Quest Link compatibility recovery.
 ## What it does
 
 - Detects CPU and GPU hardware through WMI.
+- Provides Chinese, Japanese, and English UI language switching.
+- Uses a scrollable dashboard so smaller windows can still reach every control.
 - Lets the user select a GPU and write that CPU/GPU into Meta's local compatibility lists:
   - `%LOCALAPPDATA%\Oculus\Compatibility.json`
   - `%ProgramFiles%\Meta Horizon\Support\oculus-runtime\Compatibility.json`
