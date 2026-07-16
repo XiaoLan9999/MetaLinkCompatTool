@@ -6,6 +6,10 @@ Windows GUI helper for Meta Horizon / Quest Link compatibility recovery.
 
 - Detects CPU and GPU hardware through WMI.
 - Provides Chinese, Japanese, and English UI language switching.
+- Includes three complete visual themes with persisted in-app switching:
+  - Atelier ivory: warm, lightweight cultural-brand styling.
+  - Mist grey: restrained cool-grey styling.
+  - Midnight ink: polished dark styling.
 - Uses a scrollable dashboard so smaller windows can still reach every control.
 - Lets the user select a GPU and write that CPU/GPU into Meta's local compatibility lists:
   - `%LOCALAPPDATA%\Oculus\Compatibility.json`
@@ -55,4 +59,12 @@ Silent highwind startup mode:
 
 ```powershell
 MetaLinkCompatTool.exe --start-highwind --quiet
+```
+
+Start with a specific visual theme for previewing:
+
+```powershell
+MetaLinkCompatTool.exe --theme=Atelier
+MetaLinkCompatTool.exe --theme=Mist
+MetaLinkCompatTool.exe --theme=Ink
 ```

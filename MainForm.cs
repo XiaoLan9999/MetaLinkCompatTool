@@ -5,13 +5,14 @@ namespace MetaLinkCompatTool;
 
 public sealed class MainForm : Form
 {
-    private readonly Color _bg = Color.FromArgb(16, 20, 28);
-    private readonly Color _card = Color.FromArgb(27, 34, 48);
-    private readonly Color _card2 = Color.FromArgb(35, 44, 62);
-    private readonly Color _accent = Color.FromArgb(92, 150, 255);
-    private readonly Color _accent2 = Color.FromArgb(83, 220, 180);
-    private readonly Color _text = Color.FromArgb(238, 243, 250);
-    private readonly Color _muted = Color.FromArgb(155, 166, 184);
+    private readonly UiThemePalette _theme = UiThemes.Get(UiThemeSettings.Load());
+    private Color _bg => _theme.Background;
+    private Color _card => _theme.Surface;
+    private Color _card2 => _theme.SurfaceAlt;
+    private Color _accent => _theme.Accent;
+    private Color _accent2 => _theme.AccentSecondary;
+    private Color _text => _theme.Text;
+    private Color _muted => _theme.Muted;
 
     private HardwareInfo? _hardware;
     private AppLanguage _language = DetectDefaultLanguage();
@@ -20,8 +21,8 @@ public sealed class MainForm : Form
     private readonly List<Button> _operationButtons = new();
 
     private readonly Panel _pageHost = new();
-    private readonly Button _dashboardNavButton = new();
-    private readonly Button _toolsNavButton = new();
+    private readonly Button _dashboardNavButton = new RoundedButton();
+    private readonly Button _toolsNavButton = new RoundedButton();
     private readonly Panel _scrollHost = new();
     private readonly Panel _toolsScrollHost = new();
     private readonly TableLayoutPanel _content = new();
@@ -34,6 +35,7 @@ public sealed class MainForm : Form
     private readonly ComboBox _gpuCombo = new();
     private readonly ComboBox _backupCombo = new();
     private readonly ComboBox _languageCombo = new();
+    private readonly ComboBox _themeCombo = new();
     private readonly ComboBox _aswCombo = new();
     private readonly ComboBox _colorSpaceCombo = new();
     private readonly TextBox _compatStatusBox = new();
@@ -47,6 +49,7 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _encodeWidthBox = new();
     private readonly NumericUpDown _pixelsPerDisplayPixelBox = new();
     private readonly ToolTip _detailsToolTip = new();
+    private bool _themeChoiceReady;
 
     private sealed record OptionItem(string Value, string Text)
     {
@@ -61,7 +64,7 @@ public sealed class MainForm : Form
         Size = new Size(1220, 820);
         BackColor = _bg;
         ForeColor = _text;
-        Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+        Font = new Font(_theme.BodyFont, 10F, FontStyle.Regular);
         DoubleBuffered = true;
 
         var executablePath = Environment.ProcessPath;
@@ -79,6 +82,12 @@ public sealed class MainForm : Form
         ApplyLanguage();
         Shown += (_, _) => RefreshAll();
         Resize += (_, _) => ResizeScrollContent();
+    }
+
+    protected override void OnHandleCreated(EventArgs eventArgs)
+    {
+        base.OnHandleCreated(eventArgs);
+        WindowChrome.ApplyDarkTitleBar(Handle, _theme.Kind == UiThemeKind.Ink);
     }
 
     private static AppLanguage DetectDefaultLanguage()
@@ -103,7 +112,7 @@ public sealed class MainForm : Form
             Padding = Padding.Empty
         };
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(shell);
 
@@ -121,9 +130,9 @@ public sealed class MainForm : Form
         _content.ColumnCount = 1;
         _content.RowCount = 3;
         _content.AutoSize = false;
-        _content.Padding = new Padding(18);
+        _content.Padding = new Padding(22);
         _content.BackColor = _bg;
-        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
         _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 760));
         _content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _scrollHost.Controls.Add(_content);
@@ -140,10 +149,10 @@ public sealed class MainForm : Form
         _toolsContent.ColumnCount = 1;
         _toolsContent.RowCount = 4;
         _toolsContent.AutoSize = false;
-        _toolsContent.Padding = new Padding(18);
+        _toolsContent.Padding = new Padding(22);
         _toolsContent.BackColor = _bg;
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
-        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 360));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 400));
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _toolsScrollHost.Controls.Add(_toolsContent);
@@ -159,38 +168,87 @@ public sealed class MainForm : Form
 
     private Control BuildNavigation()
     {
-        var navigation = new FlowLayoutPanel
+        var navigation = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = _bg,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(22, 8, 22, 6),
+            Margin = Padding.Empty
+        };
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 224));
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        var brand = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = _bg,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(18, 9, 18, 7),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 5, 0, 0)
+        };
+        var navigationIcon = Icon ?? SystemIcons.Application;
+        using (var iconBitmap = navigationIcon.ToBitmap())
+        {
+            brand.Controls.Add(new PictureBox
+            {
+                Image = new Bitmap(iconBitmap, new Size(30, 30)),
+                Size = new Size(30, 30),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Margin = new Padding(0, 0, 10, 0)
+            });
+        }
+        brand.Controls.Add(new Label
+        {
+            Text = "META LINK LAB",
+            AutoSize = false,
+            Size = new Size(156, 30),
+            ForeColor = _text,
+            Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
             Margin = Padding.Empty
+        });
+        navigation.Controls.Add(brand, 0, 0);
+
+        var navigationItems = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = _bg,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 3, 0, 0)
         };
 
         ConfigureNavigationButton(_dashboardNavButton, "TabDashboard");
         _dashboardNavButton.Click += (_, _) => ShowPage(showTools: false);
-        navigation.Controls.Add(_dashboardNavButton);
+        navigationItems.Controls.Add(_dashboardNavButton);
 
         ConfigureNavigationButton(_toolsNavButton, "TabTools");
         _toolsNavButton.Click += (_, _) => ShowPage(showTools: true);
-        navigation.Controls.Add(_toolsNavButton);
+        navigationItems.Controls.Add(_toolsNavButton);
+        navigation.Controls.Add(navigationItems, 1, 0);
 
         return navigation;
     }
 
     private void ConfigureNavigationButton(Button button, string languageKey)
     {
-        button.Size = new Size(142, 38);
+        button.Size = new Size(138, 42);
         button.FlatStyle = FlatStyle.Flat;
         button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.MouseOverBackColor = _card2;
         button.FlatAppearance.MouseDownBackColor = _accent;
-        button.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+        button.Font = new Font(_theme.BodyFont, 10F, FontStyle.Bold);
         button.TextAlign = ContentAlignment.MiddleCenter;
         button.Cursor = Cursors.Hand;
         button.Margin = new Padding(0, 0, 10, 0);
+        if (button is RoundedButton roundedButton)
+        {
+            roundedButton.CornerRadius = _theme.ButtonRadius;
+        }
         Bind(button, languageKey);
     }
 
@@ -215,8 +273,8 @@ public sealed class MainForm : Form
 
     private void StyleNavigationButton(Button button, bool active)
     {
-        button.BackColor = active ? _accent : _bg;
-        button.ForeColor = active ? Color.White : _muted;
+        button.BackColor = active ? _theme.NavigationActiveBackground : _bg;
+        button.ForeColor = active ? _theme.NavigationActiveText : _muted;
     }
 
     private void ResizeScrollContent()
@@ -224,10 +282,10 @@ public sealed class MainForm : Form
         var scrollbarAllowance = SystemInformation.VerticalScrollBarWidth + 8;
         _content.Size = new Size(
             Math.Max(980, _scrollHost.ClientSize.Width - scrollbarAllowance),
-            Math.Max(1232, _scrollHost.ClientSize.Height));
+            Math.Max(1262, _scrollHost.ClientSize.Height));
         _toolsContent.Size = new Size(
             Math.Max(980, _toolsScrollHost.ClientSize.Width - scrollbarAllowance),
-            Math.Max(916, _toolsScrollHost.ClientSize.Height));
+            Math.Max(964, _toolsScrollHost.ClientSize.Height));
     }
 
     private Control BuildHeader()
@@ -236,35 +294,45 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             BackColor = _bg,
             Margin = new Padding(0, 0, 0, 10)
         };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+        header.Controls.Add(new Label
+        {
+            Text = "META LINK / LOCAL DESKTOP UTILITY",
+            Dock = DockStyle.Fill,
+            ForeColor = _accent,
+            Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
 
         var title = new Label
         {
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
             ForeColor = _text,
-            Font = new Font("Segoe UI Semibold", 20F, FontStyle.Bold),
+            Font = new Font(_theme.DisplayFont, 21F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         };
         Bind(title, "AppTitle");
-        header.Controls.Add(title, 0, 0);
+        header.Controls.Add(title, 0, 1);
 
         var subtitle = new Label
         {
             Dock = DockStyle.Fill,
             ForeColor = _muted,
-            Font = new Font("Segoe UI", 9.6F),
+            Font = new Font(_theme.BodyFont, 9.6F),
             TextAlign = ContentAlignment.TopLeft,
             AutoEllipsis = true
         };
         Bind(subtitle, "Subtitle");
-        header.Controls.Add(subtitle, 0, 1);
+        header.Controls.Add(subtitle, 0, 2);
 
         var toolbar = new FlowLayoutPanel
         {
@@ -279,7 +347,7 @@ public sealed class MainForm : Form
         _adminLabel.AutoSize = false;
         _adminLabel.Size = new Size(150, 32);
         _adminLabel.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold);
-        _adminLabel.ForeColor = Elevation.IsAdministrator() ? _accent2 : Color.FromArgb(255, 206, 110);
+        _adminLabel.ForeColor = Elevation.IsAdministrator() ? _accent2 : _theme.Warning;
         _adminLabel.TextAlign = ContentAlignment.MiddleLeft;
         toolbar.Controls.Add(_adminLabel);
 
@@ -306,6 +374,22 @@ public sealed class MainForm : Form
         };
         toolbar.Controls.Add(_languageCombo);
 
+        var appearanceLabel = CreateMutedLabel("");
+        appearanceLabel.AutoSize = false;
+        appearanceLabel.Size = new Size(64, 32);
+        appearanceLabel.TextAlign = ContentAlignment.MiddleLeft;
+        appearanceLabel.Margin = new Padding(14, 0, 0, 0);
+        Bind(appearanceLabel, "Appearance");
+        toolbar.Controls.Add(appearanceLabel);
+
+        StyleCombo(_themeCombo);
+        _themeCombo.Size = new Size(156, 32);
+        _themeCombo.Dock = DockStyle.None;
+        _themeCombo.SelectedIndexChanged += ThemeComboSelectedIndexChanged;
+        toolbar.Controls.Add(_themeCombo);
+        LoadThemeChoices();
+        _themeChoiceReady = true;
+
         var refresh = CreateButton("", _accent);
         Bind(refresh, "Refresh");
         refresh.Size = new Size(112, 34);
@@ -314,7 +398,7 @@ public sealed class MainForm : Form
         refresh.Click += (_, _) => RefreshAll();
         toolbar.Controls.Add(refresh);
 
-        header.Controls.Add(toolbar, 0, 2);
+        header.Controls.Add(toolbar, 0, 3);
 
         return header;
     }
@@ -422,14 +506,14 @@ public sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         AddActionButton(layout, "ApplyPatch", _accent, 0, 0, ApplyPatchClicked);
-        AddActionButton(layout, "Rollback", Color.FromArgb(255, 160, 105), 1, 0, RollbackClicked);
-        AddActionButton(layout, "KillMeta", Color.FromArgb(255, 110, 120), 0, 1, KillMetaClicked);
+        AddActionButton(layout, "Rollback", _theme.Warning, 1, 0, RollbackClicked);
+        AddActionButton(layout, "KillMeta", _theme.Danger, 0, 1, KillMetaClicked);
         AddActionButton(layout, "RestartMeta", _accent2, 1, 1, RestartMetaClicked);
-        AddActionButton(layout, "StartHighwind", Color.FromArgb(130, 185, 255), 0, 2, StartHighwindClicked);
-        AddActionButton(layout, "LaunchClient", Color.FromArgb(130, 185, 255), 1, 2, LaunchClientClicked);
-        AddActionButton(layout, "InstallAutostart", Color.FromArgb(148, 210, 130), 0, 3, InstallAutostartClicked);
-        AddActionButton(layout, "RemoveAutostart", Color.FromArgb(185, 145, 255), 1, 3, RemoveAutostartClicked);
-        AddActionButton(layout, "SetEncoder", Color.FromArgb(120, 205, 210), 0, 4, SetEncoderDefaultsClicked);
+        AddActionButton(layout, "StartHighwind", _theme.Info, 0, 2, StartHighwindClicked);
+        AddActionButton(layout, "LaunchClient", _theme.Info, 1, 2, LaunchClientClicked);
+        AddActionButton(layout, "InstallAutostart", _theme.Success, 0, 3, InstallAutostartClicked);
+        AddActionButton(layout, "RemoveAutostart", _theme.Lavender, 1, 3, RemoveAutostartClicked);
+        AddActionButton(layout, "SetEncoder", _theme.Aqua, 0, 4, SetEncoderDefaultsClicked);
         layout.SetColumnSpan(layout.GetControlFromPosition(0, 4)!, 2);
 
         var options = new FlowLayoutPanel
@@ -523,7 +607,7 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ForeColor = _muted,
-            Font = new Font("Segoe UI", 9.5F),
+            Font = new Font(_theme.BodyFont, 9.5F),
             TextAlign = ContentAlignment.TopLeft
         };
         Bind(intro, "DebugToolsIntro");
@@ -532,7 +616,7 @@ public sealed class MainForm : Form
         var note = new Label
         {
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(255, 206, 110),
+            ForeColor = _theme.Warning,
             Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = true
@@ -569,9 +653,9 @@ public sealed class MainForm : Form
             RowCount = 3,
             BackColor = _card
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
 
         _linkSettingsLabel.Dock = DockStyle.Fill;
         _linkSettingsLabel.ForeColor = _muted;
@@ -590,7 +674,7 @@ public sealed class MainForm : Form
         settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
         for (var i = 0; i < 4; i++)
         {
-            settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         }
 
         StyleCheck(_hevcCheck);
@@ -615,8 +699,8 @@ public sealed class MainForm : Form
         buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         AddActionButton(buttons, "ApplyLinkSettings", _accent, 0, 0, ApplyLinkSettingsClicked);
-        AddActionButton(buttons, "Apply120Preset", Color.FromArgb(148, 210, 130), 1, 0, Apply120PresetClicked);
-        AddActionButton(buttons, "ResetLinkDefaults", Color.FromArgb(185, 145, 255), 0, 1, ResetLinkDefaultsClicked);
+        AddActionButton(buttons, "Apply120Preset", _theme.Success, 1, 0, Apply120PresetClicked);
+        AddActionButton(buttons, "ResetLinkDefaults", _theme.Lavender, 0, 1, ResetLinkDefaultsClicked);
         AddActionButton(buttons, "RefreshToolSettings", _card2, 1, 1, RefreshToolSettingsClicked);
         layout.Controls.Add(buttons, 0, 2);
 
@@ -635,7 +719,7 @@ public sealed class MainForm : Form
             BackColor = _card
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
 
         var settings = new TableLayoutPanel
         {
@@ -670,9 +754,9 @@ public sealed class MainForm : Form
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        AddActionButton(buttons, "LaunchDebugTool", Color.FromArgb(130, 185, 255), 0, 0, LaunchDebugToolClicked);
+        AddActionButton(buttons, "LaunchDebugTool", _theme.Info, 0, 0, LaunchDebugToolClicked);
         AddActionButton(buttons, "ApplyOdtRuntime", _accent2, 1, 0, ApplyOdtRuntimeClicked);
-        AddActionButton(buttons, "KillMeta", Color.FromArgb(255, 110, 120), 0, 1, KillMetaClicked);
+        AddActionButton(buttons, "KillMeta", _theme.Danger, 0, 1, KillMetaClicked);
         AddActionButton(buttons, "RestartMeta", _accent, 1, 1, RestartMetaClicked);
         layout.Controls.Add(buttons, 0, 1);
 
@@ -697,13 +781,13 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ForeColor = _muted,
-            Font = new Font("Segoe UI", 9.5F),
+            Font = new Font(_theme.BodyFont, 9.5F),
             TextAlign = ContentAlignment.MiddleLeft
         };
         Bind(text, "FeedbackHint");
         layout.Controls.Add(text, 0, 0);
 
-        var open = CreateButton("", Color.FromArgb(120, 205, 210));
+        var open = CreateButton("", _theme.Aqua);
         Bind(open, "OpenFeedback");
         open.Click += OpenFeedbackClicked;
         layout.Controls.Add(open, 1, 0);
@@ -730,12 +814,15 @@ public sealed class MainForm : Form
 
     private Panel CreateCard(string titleKey, out Panel body)
     {
-        var outer = new Panel
+        var outer = new RoundedPanel
         {
             Dock = DockStyle.Fill,
-            Margin = new Padding(8),
-            Padding = new Padding(18),
-            BackColor = _card
+            Margin = new Padding(10),
+            Padding = new Padding(20),
+            BackColor = _card,
+            BorderColor = _theme.Border,
+            BorderThickness = 1,
+            CornerRadius = _theme.CardRadius
         };
 
         var layout = new TableLayoutPanel
@@ -754,7 +841,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
             ForeColor = _text,
-            Font = new Font("Segoe UI Semibold", 13F, FontStyle.Bold),
+            Font = new Font(_theme.DisplayFont, 12.5F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         };
         Bind(title, titleKey);
@@ -771,19 +858,26 @@ public sealed class MainForm : Form
 
     private Button CreateButton(string text, Color color)
     {
-        var button = new Button
+        var button = new RoundedButton
         {
             Text = text,
             Dock = DockStyle.Fill,
             FlatStyle = FlatStyle.Flat,
             BackColor = color,
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
+            ForeColor = GetButtonTextColor(color),
+            Font = new Font(_theme.BodyFont, 9.5F, FontStyle.Bold),
             Cursor = Cursors.Hand,
-            Margin = new Padding(6)
+            Margin = new Padding(6),
+            CornerRadius = _theme.ButtonRadius
         };
         button.FlatAppearance.BorderSize = 0;
         return button;
+    }
+
+    private Color GetButtonTextColor(Color background)
+    {
+        var brightness = (background.R * 299 + background.G * 587 + background.B * 114) / 1000;
+        return brightness >= 170 ? _text : Color.White;
     }
 
     private void AddActionButton(TableLayoutPanel layout, string key, Color color, int col, int row, EventHandler handler)
@@ -803,7 +897,7 @@ public sealed class MainForm : Form
             ForeColor = _muted,
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
-            Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold)
+            Font = new Font(_theme.BodyFont, 9F, FontStyle.Bold)
         };
     }
 
@@ -814,7 +908,7 @@ public sealed class MainForm : Form
         combo.BackColor = _card2;
         combo.ForeColor = _text;
         combo.FlatStyle = FlatStyle.Flat;
-        combo.Font = new Font("Segoe UI", 9.5F);
+        combo.Font = new Font(_theme.BodyFont, 9.5F);
         combo.Margin = new Padding(2, 4, 2, 6);
     }
 
@@ -835,7 +929,7 @@ public sealed class MainForm : Form
         numeric.BackColor = _card2;
         numeric.ForeColor = _text;
         numeric.BorderStyle = BorderStyle.FixedSingle;
-        numeric.Font = new Font("Segoe UI", 9.5F);
+        numeric.Font = new Font(_theme.BodyFont, 9.5F);
         numeric.Margin = new Padding(2, 4, 2, 6);
     }
 
@@ -873,6 +967,43 @@ public sealed class MainForm : Form
         SelectOption(_colorSpaceCombo, selectedColor);
     }
 
+    private void LoadThemeChoices()
+    {
+        var wasReady = _themeChoiceReady;
+        _themeChoiceReady = false;
+        var options = new List<UiThemeOption>
+        {
+            new(UiThemeKind.Atelier, T("ThemeAtelier")),
+            new(UiThemeKind.Mist, T("ThemeMist")),
+            new(UiThemeKind.Ink, T("ThemeInk"))
+        };
+        _themeCombo.DataSource = options;
+        _themeCombo.SelectedItem = options.First(option => option.Kind == _theme.Kind);
+        _themeChoiceReady = wasReady;
+    }
+
+    private void ThemeComboSelectedIndexChanged(object? sender, EventArgs eventArgs)
+    {
+        if (!_themeChoiceReady || _themeCombo.SelectedItem is not UiThemeOption option || option.Kind == _theme.Kind)
+        {
+            return;
+        }
+
+        try
+        {
+            UiThemeSettings.Save(option.Kind);
+            BeginInvoke(() =>
+            {
+                Application.Restart();
+                Close();
+            });
+        }
+        catch (Exception ex)
+        {
+            ShowError(T("Appearance"), ex);
+        }
+    }
+
     private static void SelectOption(ComboBox combo, string value)
     {
         foreach (var item in combo.Items)
@@ -908,8 +1039,9 @@ public sealed class MainForm : Form
         }
 
         LoadToolChoices();
+        LoadThemeChoices();
         _adminLabel.Text = Elevation.IsAdministrator() ? T("Admin") : T("Standard");
-        _adminLabel.ForeColor = Elevation.IsAdministrator() ? _accent2 : Color.FromArgb(255, 206, 110);
+        _adminLabel.ForeColor = Elevation.IsAdministrator() ? _accent2 : _theme.Warning;
         if (_hardware is null)
         {
             _cpuLabel.Text = T("NotLoaded");
