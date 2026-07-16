@@ -19,9 +19,9 @@ public sealed class MainForm : Form
     private readonly Dictionary<string, Control> _localizedControls = new();
     private readonly List<Button> _operationButtons = new();
 
-    private readonly TabControl _tabs = new();
-    private readonly TabPage _dashboardTab = new();
-    private readonly TabPage _toolsTab = new();
+    private readonly Panel _pageHost = new();
+    private readonly Button _dashboardNavButton = new();
+    private readonly Button _toolsNavButton = new();
     private readonly Panel _scrollHost = new();
     private readonly Panel _toolsScrollHost = new();
     private readonly TableLayoutPanel _content = new();
@@ -46,6 +46,7 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _bitrateBox = new();
     private readonly NumericUpDown _encodeWidthBox = new();
     private readonly NumericUpDown _pixelsPerDisplayPixelBox = new();
+    private readonly ToolTip _detailsToolTip = new();
 
     private sealed record OptionItem(string Value, string Text)
     {
@@ -62,6 +63,17 @@ public sealed class MainForm : Form
         ForeColor = _text;
         Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         DoubleBuffered = true;
+
+        var executablePath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(executablePath))
+        {
+            Icon = Icon.ExtractAssociatedIcon(executablePath) ?? Icon;
+        }
+
+        _detailsToolTip.AutoPopDelay = 30000;
+        _detailsToolTip.InitialDelay = 300;
+        _detailsToolTip.ReshowDelay = 100;
+        _detailsToolTip.ShowAlways = true;
 
         BuildUi();
         ApplyLanguage();
@@ -81,27 +93,30 @@ public sealed class MainForm : Form
 
     private void BuildUi()
     {
-        _tabs.Dock = DockStyle.Fill;
-        _tabs.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold);
-        _tabs.Padding = new Point(16, 6);
-        Controls.Add(_tabs);
+        var shell = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = _bg,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        Controls.Add(shell);
 
-        _dashboardTab.BackColor = _bg;
-        _dashboardTab.Padding = new Padding(0);
-        _dashboardTab.UseVisualStyleBackColor = false;
-        Bind(_dashboardTab, "TabDashboard");
-        _tabs.TabPages.Add(_dashboardTab);
+        shell.Controls.Add(BuildNavigation(), 0, 0);
 
-        _toolsTab.BackColor = _bg;
-        _toolsTab.Padding = new Padding(0);
-        _toolsTab.UseVisualStyleBackColor = false;
-        Bind(_toolsTab, "TabTools");
-        _tabs.TabPages.Add(_toolsTab);
+        _pageHost.Dock = DockStyle.Fill;
+        _pageHost.BackColor = _bg;
+        shell.Controls.Add(_pageHost, 0, 1);
 
         _scrollHost.Dock = DockStyle.Fill;
         _scrollHost.AutoScroll = true;
         _scrollHost.BackColor = _bg;
-        _dashboardTab.Controls.Add(_scrollHost);
+        _pageHost.Controls.Add(_scrollHost);
 
         _content.ColumnCount = 1;
         _content.RowCount = 3;
@@ -109,8 +124,8 @@ public sealed class MainForm : Form
         _content.Padding = new Padding(18);
         _content.BackColor = _bg;
         _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
-        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 620));
-        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 300));
+        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 760));
+        _content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _scrollHost.Controls.Add(_content);
 
         _content.Controls.Add(BuildHeader(), 0, 0);
@@ -120,7 +135,7 @@ public sealed class MainForm : Form
         _toolsScrollHost.Dock = DockStyle.Fill;
         _toolsScrollHost.AutoScroll = true;
         _toolsScrollHost.BackColor = _bg;
-        _toolsTab.Controls.Add(_toolsScrollHost);
+        _pageHost.Controls.Add(_toolsScrollHost);
 
         _toolsContent.ColumnCount = 1;
         _toolsContent.RowCount = 4;
@@ -130,7 +145,7 @@ public sealed class MainForm : Form
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 360));
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
-        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 260));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _toolsScrollHost.Controls.Add(_toolsContent);
         _toolsContent.Controls.Add(BuildToolIntroCard(), 0, 0);
         _toolsContent.Controls.Add(BuildToolBody(), 0, 1);
@@ -138,7 +153,70 @@ public sealed class MainForm : Form
         _toolsContent.Controls.Add(BuildToolLogCard(), 0, 3);
 
         LoadToolChoices();
+        ShowPage(showTools: false);
         ResizeScrollContent();
+    }
+
+    private Control BuildNavigation()
+    {
+        var navigation = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = _bg,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(18, 9, 18, 7),
+            Margin = Padding.Empty
+        };
+
+        ConfigureNavigationButton(_dashboardNavButton, "TabDashboard");
+        _dashboardNavButton.Click += (_, _) => ShowPage(showTools: false);
+        navigation.Controls.Add(_dashboardNavButton);
+
+        ConfigureNavigationButton(_toolsNavButton, "TabTools");
+        _toolsNavButton.Click += (_, _) => ShowPage(showTools: true);
+        navigation.Controls.Add(_toolsNavButton);
+
+        return navigation;
+    }
+
+    private void ConfigureNavigationButton(Button button, string languageKey)
+    {
+        button.Size = new Size(142, 38);
+        button.FlatStyle = FlatStyle.Flat;
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = _card2;
+        button.FlatAppearance.MouseDownBackColor = _accent;
+        button.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+        button.TextAlign = ContentAlignment.MiddleCenter;
+        button.Cursor = Cursors.Hand;
+        button.Margin = new Padding(0, 0, 10, 0);
+        Bind(button, languageKey);
+    }
+
+    private void ShowPage(bool showTools)
+    {
+        _scrollHost.Visible = !showTools;
+        _toolsScrollHost.Visible = showTools;
+
+        if (showTools)
+        {
+            _toolsScrollHost.BringToFront();
+        }
+        else
+        {
+            _scrollHost.BringToFront();
+        }
+
+        StyleNavigationButton(_dashboardNavButton, !showTools);
+        StyleNavigationButton(_toolsNavButton, showTools);
+        ResizeScrollContent();
+    }
+
+    private void StyleNavigationButton(Button button, bool active)
+    {
+        button.BackColor = active ? _accent : _bg;
+        button.ForeColor = active ? Color.White : _muted;
     }
 
     private void ResizeScrollContent()
@@ -146,10 +224,10 @@ public sealed class MainForm : Form
         var scrollbarAllowance = SystemInformation.VerticalScrollBarWidth + 8;
         _content.Size = new Size(
             Math.Max(980, _scrollHost.ClientSize.Width - scrollbarAllowance),
-            1092);
+            Math.Max(1232, _scrollHost.ClientSize.Height));
         _toolsContent.Size = new Size(
             Math.Max(980, _toolsScrollHost.ClientSize.Width - scrollbarAllowance),
-            916);
+            Math.Max(916, _toolsScrollHost.ClientSize.Height));
     }
 
     private Control BuildHeader()
@@ -255,13 +333,13 @@ public sealed class MainForm : Form
 
         var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _bg };
         left.RowStyles.Add(new RowStyle(SizeType.Absolute, 250));
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 370));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 510));
         left.Controls.Add(BuildDeviceCard(), 0, 0);
         left.Controls.Add(BuildCompatibilityCard(), 0, 1);
 
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _bg };
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 430));
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 330));
         right.Controls.Add(BuildActionsCard(), 0, 0);
         right.Controls.Add(BuildBackupCard(), 0, 1);
 
@@ -300,6 +378,7 @@ public sealed class MainForm : Form
         _gpuDetailLabel.ForeColor = _muted;
         _gpuDetailLabel.Dock = DockStyle.Fill;
         _gpuDetailLabel.AutoEllipsis = true;
+        _gpuDetailLabel.Cursor = Cursors.Help;
         layout.Controls.Add(_gpuDetailLabel, 0, 4);
 
         body.Controls.Add(layout);
@@ -835,6 +914,7 @@ public sealed class MainForm : Form
         {
             _cpuLabel.Text = T("NotLoaded");
         }
+        _detailsToolTip.SetToolTip(_cpuLabel, _cpuLabel.Text);
         UpdateGpuDetails();
     }
 
@@ -844,6 +924,7 @@ public sealed class MainForm : Form
         {
             _hardware = DeviceInfoService.GetHardwareInfo();
             _cpuLabel.Text = _hardware.Cpu.Name;
+            _detailsToolTip.SetToolTip(_cpuLabel, _hardware.Cpu.Name);
             _gpuCombo.DataSource = _hardware.Gpus.ToList();
 
             var preferred = _hardware.Gpus
@@ -934,16 +1015,21 @@ public sealed class MainForm : Form
         if (_gpuCombo.SelectedItem is not GpuInfo gpu)
         {
             _gpuDetailLabel.Text = T("NoGpu");
+            _detailsToolTip.SetToolTip(_gpuDetailLabel, _gpuDetailLabel.Text);
+            _detailsToolTip.SetToolTip(_gpuCombo, "");
             return;
         }
 
         var vram = gpu.AdapterRamBytes > 0 ? $"{gpu.AdapterRamBytes / 1024 / 1024} MB" : T("Unknown");
-        _gpuDetailLabel.Text =
+        var details =
             $"{T("Vendor")}: {gpu.Vendor}{Environment.NewLine}" +
             $"{T("Pid")}: {gpu.Pid}{Environment.NewLine}" +
             $"{T("Driver")}: {gpu.DriverVersion}{Environment.NewLine}" +
             $"{T("Vram")}: {vram}{Environment.NewLine}" +
             gpu.PnpDeviceId;
+        _gpuDetailLabel.Text = details;
+        _detailsToolTip.SetToolTip(_gpuDetailLabel, details);
+        _detailsToolTip.SetToolTip(_gpuCombo, gpu.ToString());
         if (_hardware is not null)
         {
             RefreshStatus();
