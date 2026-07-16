@@ -1,5 +1,4 @@
 using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
 
 namespace MetaLinkCompatTool;
 
@@ -95,25 +94,5 @@ public sealed class RoundedButton : Button
         path.CloseFigure();
         Region?.Dispose();
         Region = new Region(path);
-    }
-}
-
-public static class WindowChrome
-{
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr windowHandle, int attribute, ref int value, int valueSize);
-
-    public static void ApplyDarkTitleBar(IntPtr windowHandle, bool enabled)
-    {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10))
-        {
-            return;
-        }
-
-        var value = enabled ? 1 : 0;
-        if (DwmSetWindowAttribute(windowHandle, 20, ref value, sizeof(int)) != 0)
-        {
-            DwmSetWindowAttribute(windowHandle, 19, ref value, sizeof(int));
-        }
     }
 }

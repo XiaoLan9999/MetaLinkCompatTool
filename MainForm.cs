@@ -5,7 +5,7 @@ namespace MetaLinkCompatTool;
 
 public sealed class MainForm : Form
 {
-    private readonly UiThemePalette _theme = UiThemes.Get(UiThemeSettings.Load());
+    private readonly UiThemePalette _theme = UiThemes.Atelier;
     private Color _bg => _theme.Background;
     private Color _card => _theme.Surface;
     private Color _card2 => _theme.SurfaceAlt;
@@ -27,6 +27,12 @@ public sealed class MainForm : Form
     private readonly Panel _toolsScrollHost = new();
     private readonly TableLayoutPanel _content = new();
     private readonly TableLayoutPanel _toolsContent = new();
+    private readonly TableLayoutPanel _dashboardBody = new();
+    private readonly TableLayoutPanel _dashboardLeft = new();
+    private readonly TableLayoutPanel _dashboardRight = new();
+    private readonly TableLayoutPanel _toolsBody = new();
+    private Control? _linkTuningCard;
+    private Control? _debugToolCard;
     private readonly Label _adminLabel = new();
     private readonly Label _cpuLabel = new();
     private readonly Label _gpuDetailLabel = new();
@@ -35,7 +41,6 @@ public sealed class MainForm : Form
     private readonly ComboBox _gpuCombo = new();
     private readonly ComboBox _backupCombo = new();
     private readonly ComboBox _languageCombo = new();
-    private readonly ComboBox _themeCombo = new();
     private readonly ComboBox _aswCombo = new();
     private readonly ComboBox _colorSpaceCombo = new();
     private readonly TextBox _compatStatusBox = new();
@@ -49,7 +54,18 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _encodeWidthBox = new();
     private readonly NumericUpDown _pixelsPerDisplayPixelBox = new();
     private readonly ToolTip _detailsToolTip = new();
-    private bool _themeChoiceReady;
+    private readonly List<FontMetric> _fontMetrics = new();
+    private readonly List<BoxMetric> _boxMetrics = new();
+    private readonly List<RowMetric> _rowMetrics = new();
+    private readonly List<ColumnMetric> _columnMetrics = new();
+    private List<Font> _scaledFonts = new();
+    private float _lastUiScale = -1F;
+    private bool? _narrowLayout;
+
+    private sealed record FontMetric(Control Control, string Family, float Size, FontStyle Style);
+    private sealed record BoxMetric(Control Control, Padding Margin, Padding BasePadding, Size? FixedSize);
+    private sealed record RowMetric(RowStyle Style, float Height);
+    private sealed record ColumnMetric(ColumnStyle Style, float Width);
 
     private sealed record OptionItem(string Value, string Text)
     {
@@ -80,14 +96,10 @@ public sealed class MainForm : Form
 
         BuildUi();
         ApplyLanguage();
+        CaptureResponsiveMetrics(this);
+        ResizeScrollContent();
         Shown += (_, _) => RefreshAll();
         Resize += (_, _) => ResizeScrollContent();
-    }
-
-    protected override void OnHandleCreated(EventArgs eventArgs)
-    {
-        base.OnHandleCreated(eventArgs);
-        WindowChrome.ApplyDarkTitleBar(Handle, _theme.Kind == UiThemeKind.Ink);
     }
 
     private static AppLanguage DetectDefaultLanguage()
@@ -133,7 +145,7 @@ public sealed class MainForm : Form
         _content.Padding = new Padding(22);
         _content.BackColor = _bg;
         _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
-        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 760));
+        _content.RowStyles.Add(new RowStyle(SizeType.Absolute, 830));
         _content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _scrollHost.Controls.Add(_content);
 
@@ -151,9 +163,9 @@ public sealed class MainForm : Form
         _toolsContent.AutoSize = false;
         _toolsContent.Padding = new Padding(22);
         _toolsContent.BackColor = _bg;
-        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 400));
-        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        _toolsContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
         _toolsContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _toolsScrollHost.Controls.Add(_toolsContent);
         _toolsContent.Controls.Add(BuildToolIntroCard(), 0, 0);
@@ -172,12 +184,13 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = _bg,
-            ColumnCount = 2,
+            ColumnCount = 3,
             RowCount = 1,
             Padding = new Padding(22, 8, 22, 6),
             Margin = Padding.Empty
         };
-        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 224));
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 178));
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 296));
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var brand = new FlowLayoutPanel
@@ -187,24 +200,13 @@ public sealed class MainForm : Form
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 5, 0, 0)
+            Padding = new Padding(0, 7, 0, 0)
         };
-        var navigationIcon = Icon ?? SystemIcons.Application;
-        using (var iconBitmap = navigationIcon.ToBitmap())
-        {
-            brand.Controls.Add(new PictureBox
-            {
-                Image = new Bitmap(iconBitmap, new Size(30, 30)),
-                Size = new Size(30, 30),
-                SizeMode = PictureBoxSizeMode.Zoom,
-                Margin = new Padding(0, 0, 10, 0)
-            });
-        }
         brand.Controls.Add(new Label
         {
             Text = "META LINK LAB",
             AutoSize = false,
-            Size = new Size(156, 30),
+            Size = new Size(166, 30),
             ForeColor = _text,
             Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft,
@@ -230,6 +232,28 @@ public sealed class MainForm : Form
         _toolsNavButton.Click += (_, _) => ShowPage(showTools: true);
         navigationItems.Controls.Add(_toolsNavButton);
         navigation.Controls.Add(navigationItems, 1, 0);
+
+        var homepage = new LinkLabel
+        {
+            Text = "小蓝个人主页",
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            LinkColor = _accent,
+            ActiveLinkColor = _accent2,
+            VisitedLinkColor = _accent,
+            ForeColor = _accent,
+            Font = new Font(_theme.BodyFont, 9.5F, FontStyle.Bold),
+            TextAlign = ContentAlignment.TopRight,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Cursor = Cursors.Hand,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+        homepage.LinkClicked += (_, _) => Process.Start(new ProcessStartInfo("https://xiaolan9999.net")
+        {
+            UseShellExecute = true
+        });
+        navigation.Controls.Add(homepage, 2, 0);
 
         return navigation;
     }
@@ -279,13 +303,208 @@ public sealed class MainForm : Form
 
     private void ResizeScrollContent()
     {
+        var hostWidth = _pageHost.ClientSize.Width;
+        var hostHeight = _pageHost.ClientSize.Height;
+        if (hostWidth <= 0 || hostHeight <= 0)
+        {
+            return;
+        }
+
+        var narrow = hostWidth < 1280;
+        ApplyResponsiveLayout(narrow);
+
+        var scale = CalculateUiScale();
+        ApplyUiScale(scale);
+
+        var dashboardBodyHeight = (narrow ? 1660F : 830F) * scale;
+        var toolsBodyHeight = (narrow ? 800F : 400F) * scale;
+        _content.RowStyles[1].Height = dashboardBodyHeight;
+        _toolsContent.RowStyles[1].Height = toolsBodyHeight;
+
         var scrollbarAllowance = SystemInformation.VerticalScrollBarWidth + 8;
+        var contentWidth = Math.Max(0, hostWidth - scrollbarAllowance);
+        var minimumWidth = (int)Math.Ceiling((narrow ? 720F : 1080F) * scale);
+        var dashboardMinimumHeight = (int)Math.Ceiling((158F + (narrow ? 1660F : 830F) + 300F + 44F) * scale);
+        var toolsMinimumHeight = (int)Math.Ceiling((180F + (narrow ? 800F : 400F) + 170F + 260F + 44F) * scale);
+
         _content.Size = new Size(
-            Math.Max(980, _scrollHost.ClientSize.Width - scrollbarAllowance),
-            Math.Max(1262, _scrollHost.ClientSize.Height));
+            Math.Max(minimumWidth, contentWidth),
+            Math.Max(dashboardMinimumHeight, hostHeight));
         _toolsContent.Size = new Size(
-            Math.Max(980, _toolsScrollHost.ClientSize.Width - scrollbarAllowance),
-            Math.Max(964, _toolsScrollHost.ClientSize.Height));
+            Math.Max(minimumWidth, contentWidth),
+            Math.Max(toolsMinimumHeight, hostHeight));
+    }
+
+    private float CalculateUiScale()
+    {
+        var widthScale = ClientSize.Width / 1220F;
+        var heightScale = ClientSize.Height / 820F;
+        var scale = Math.Clamp(Math.Min(widthScale, heightScale), 0.84F, 1.28F);
+        return MathF.Round(scale * 20F) / 20F;
+    }
+
+    private void ApplyResponsiveLayout(bool narrow)
+    {
+        if (_narrowLayout == narrow)
+        {
+            return;
+        }
+
+        ConfigureSplitLayout(_dashboardBody, _dashboardLeft, _dashboardRight, narrow, 52F, 48F);
+        if (_linkTuningCard is not null && _debugToolCard is not null)
+        {
+            ConfigureSplitLayout(_toolsBody, _linkTuningCard, _debugToolCard, narrow, 50F, 50F);
+        }
+
+        _narrowLayout = narrow;
+    }
+
+    private static void ConfigureSplitLayout(
+        TableLayoutPanel layout,
+        Control first,
+        Control second,
+        bool narrow,
+        float firstColumnPercent,
+        float secondColumnPercent)
+    {
+        layout.SuspendLayout();
+        layout.Controls.Remove(first);
+        layout.Controls.Remove(second);
+        layout.ColumnStyles.Clear();
+        layout.RowStyles.Clear();
+
+        if (narrow)
+        {
+            layout.ColumnCount = 1;
+            layout.RowCount = 2;
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            layout.Controls.Add(first, 0, 0);
+            layout.Controls.Add(second, 0, 1);
+        }
+        else
+        {
+            layout.ColumnCount = 2;
+            layout.RowCount = 1;
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, firstColumnPercent));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, secondColumnPercent));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.Controls.Add(first, 0, 0);
+            layout.Controls.Add(second, 1, 0);
+        }
+
+        layout.ResumeLayout(performLayout: true);
+    }
+
+    private void CaptureResponsiveMetrics(Control root)
+    {
+        foreach (Control control in root.Controls)
+        {
+            _fontMetrics.Add(new FontMetric(control, control.Font.FontFamily.Name, control.Font.Size, control.Font.Style));
+            Size? fixedSize = control.Dock == DockStyle.None && !control.AutoSize ? control.Size : null;
+            _boxMetrics.Add(new BoxMetric(control, control.Margin, control.Padding, fixedSize));
+
+            if (control is TableLayoutPanel table)
+            {
+                foreach (RowStyle rowStyle in table.RowStyles)
+                {
+                    if (rowStyle.SizeType == SizeType.Absolute)
+                    {
+                        _rowMetrics.Add(new RowMetric(rowStyle, rowStyle.Height));
+                    }
+                }
+
+                foreach (ColumnStyle columnStyle in table.ColumnStyles)
+                {
+                    if (columnStyle.SizeType == SizeType.Absolute)
+                    {
+                        _columnMetrics.Add(new ColumnMetric(columnStyle, columnStyle.Width));
+                    }
+                }
+            }
+
+            CaptureResponsiveMetrics(control);
+        }
+    }
+
+    private void ApplyUiScale(float scale)
+    {
+        if (_fontMetrics.Count == 0 || Math.Abs(scale - _lastUiScale) < 0.001F)
+        {
+            return;
+        }
+
+        SuspendLayout();
+        var fontCache = new Dictionary<(string Family, float Size, FontStyle Style), Font>();
+        foreach (var metric in _fontMetrics)
+        {
+            if (metric.Control.IsDisposed)
+            {
+                continue;
+            }
+
+            var size = MathF.Round(Math.Max(7F, metric.Size * scale) * 2F) / 2F;
+            var key = (metric.Family, size, metric.Style);
+            if (!fontCache.TryGetValue(key, out var font))
+            {
+                font = new Font(metric.Family, size, metric.Style, GraphicsUnit.Point);
+                fontCache[key] = font;
+            }
+            metric.Control.Font = font;
+
+            if (metric.Control is RoundedPanel panel)
+            {
+                panel.CornerRadius = Math.Max(8, (int)Math.Round(_theme.CardRadius * scale));
+            }
+            else if (metric.Control is RoundedButton button)
+            {
+                button.CornerRadius = Math.Max(5, (int)Math.Round(_theme.ButtonRadius * scale));
+            }
+        }
+
+        foreach (var metric in _boxMetrics)
+        {
+            if (metric.Control.IsDisposed)
+            {
+                continue;
+            }
+
+            metric.Control.Margin = ScalePadding(metric.Margin, scale);
+            metric.Control.Padding = ScalePadding(metric.BasePadding, scale);
+            if (metric.FixedSize is Size size)
+            {
+                metric.Control.Size = new Size(
+                    Math.Max(1, (int)Math.Round(size.Width * scale)),
+                    Math.Max(1, (int)Math.Round(size.Height * scale)));
+            }
+        }
+
+        foreach (var metric in _rowMetrics)
+        {
+            metric.Style.Height = metric.Height * scale;
+        }
+        foreach (var metric in _columnMetrics)
+        {
+            metric.Style.Width = metric.Width * scale;
+        }
+
+        foreach (var font in _scaledFonts)
+        {
+            font.Dispose();
+        }
+        _scaledFonts = fontCache.Values.ToList();
+        _lastUiScale = scale;
+        ResumeLayout(performLayout: true);
+    }
+
+    private static Padding ScalePadding(Padding padding, float scale)
+    {
+        return new Padding(
+            Math.Max(0, (int)Math.Round(padding.Left * scale)),
+            Math.Max(0, (int)Math.Round(padding.Top * scale)),
+            Math.Max(0, (int)Math.Round(padding.Right * scale)),
+            Math.Max(0, (int)Math.Round(padding.Bottom * scale)));
     }
 
     private Control BuildHeader()
@@ -354,6 +573,7 @@ public sealed class MainForm : Form
         var languageLabel = CreateMutedLabel("");
         languageLabel.AutoSize = false;
         languageLabel.Size = new Size(52, 32);
+        languageLabel.Dock = DockStyle.None;
         languageLabel.TextAlign = ContentAlignment.MiddleLeft;
         Bind(languageLabel, "Language");
         toolbar.Controls.Add(languageLabel);
@@ -374,22 +594,6 @@ public sealed class MainForm : Form
         };
         toolbar.Controls.Add(_languageCombo);
 
-        var appearanceLabel = CreateMutedLabel("");
-        appearanceLabel.AutoSize = false;
-        appearanceLabel.Size = new Size(64, 32);
-        appearanceLabel.TextAlign = ContentAlignment.MiddleLeft;
-        appearanceLabel.Margin = new Padding(14, 0, 0, 0);
-        Bind(appearanceLabel, "Appearance");
-        toolbar.Controls.Add(appearanceLabel);
-
-        StyleCombo(_themeCombo);
-        _themeCombo.Size = new Size(156, 32);
-        _themeCombo.Dock = DockStyle.None;
-        _themeCombo.SelectedIndexChanged += ThemeComboSelectedIndexChanged;
-        toolbar.Controls.Add(_themeCombo);
-        LoadThemeChoices();
-        _themeChoiceReady = true;
-
         var refresh = CreateButton("", _accent);
         Bind(refresh, "Refresh");
         refresh.Size = new Size(112, 34);
@@ -405,31 +609,29 @@ public sealed class MainForm : Form
 
     private Control BuildBody()
     {
-        var body = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = _bg
-        };
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        _dashboardBody.Dock = DockStyle.Fill;
+        _dashboardBody.BackColor = _bg;
 
-        var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _bg };
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 250));
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 510));
-        left.Controls.Add(BuildDeviceCard(), 0, 0);
-        left.Controls.Add(BuildCompatibilityCard(), 0, 1);
+        _dashboardLeft.Dock = DockStyle.Fill;
+        _dashboardLeft.RowCount = 2;
+        _dashboardLeft.ColumnCount = 1;
+        _dashboardLeft.BackColor = _bg;
+        _dashboardLeft.RowStyles.Add(new RowStyle(SizeType.Absolute, 380));
+        _dashboardLeft.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _dashboardLeft.Controls.Add(BuildDeviceCard(), 0, 0);
+        _dashboardLeft.Controls.Add(BuildCompatibilityCard(), 0, 1);
 
-        var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _bg };
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 430));
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 330));
-        right.Controls.Add(BuildActionsCard(), 0, 0);
-        right.Controls.Add(BuildBackupCard(), 0, 1);
+        _dashboardRight.Dock = DockStyle.Fill;
+        _dashboardRight.RowCount = 2;
+        _dashboardRight.ColumnCount = 1;
+        _dashboardRight.BackColor = _bg;
+        _dashboardRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 430));
+        _dashboardRight.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _dashboardRight.Controls.Add(BuildActionsCard(), 0, 0);
+        _dashboardRight.Controls.Add(BuildBackupCard(), 0, 1);
 
-        body.Controls.Add(left, 0, 0);
-        body.Controls.Add(right, 1, 0);
-        return body;
+        ConfigureSplitLayout(_dashboardBody, _dashboardLeft, _dashboardRight, narrow: false, 52F, 48F);
+        return _dashboardBody;
     }
 
     private Control BuildDeviceCard()
@@ -600,15 +802,16 @@ public sealed class MainForm : Form
             RowCount = 2,
             BackColor = _card
         };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
 
         var intro = new Label
         {
             Dock = DockStyle.Fill,
             ForeColor = _muted,
             Font = new Font(_theme.BodyFont, 9.5F),
-            TextAlign = ContentAlignment.TopLeft
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = false
         };
         Bind(intro, "DebugToolsIntro");
         layout.Controls.Add(intro, 0, 0);
@@ -618,8 +821,8 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ForeColor = _theme.Warning,
             Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
+            TextAlign = ContentAlignment.TopLeft,
+            AutoEllipsis = false
         };
         Bind(note, "RefreshRateNote");
         layout.Controls.Add(note, 0, 1);
@@ -629,18 +832,12 @@ public sealed class MainForm : Form
 
     private Control BuildToolBody()
     {
-        var body = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = _bg
-        };
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        body.Controls.Add(BuildLinkTuningCard(), 0, 0);
-        body.Controls.Add(BuildDebugToolCard(), 1, 0);
-        return body;
+        _toolsBody.Dock = DockStyle.Fill;
+        _toolsBody.BackColor = _bg;
+        _linkTuningCard = BuildLinkTuningCard();
+        _debugToolCard = BuildDebugToolCard();
+        ConfigureSplitLayout(_toolsBody, _linkTuningCard, _debugToolCard, narrow: false, 50F, 50F);
+        return _toolsBody;
     }
 
     private Control BuildLinkTuningCard()
@@ -967,43 +1164,6 @@ public sealed class MainForm : Form
         SelectOption(_colorSpaceCombo, selectedColor);
     }
 
-    private void LoadThemeChoices()
-    {
-        var wasReady = _themeChoiceReady;
-        _themeChoiceReady = false;
-        var options = new List<UiThemeOption>
-        {
-            new(UiThemeKind.Atelier, T("ThemeAtelier")),
-            new(UiThemeKind.Mist, T("ThemeMist")),
-            new(UiThemeKind.Ink, T("ThemeInk"))
-        };
-        _themeCombo.DataSource = options;
-        _themeCombo.SelectedItem = options.First(option => option.Kind == _theme.Kind);
-        _themeChoiceReady = wasReady;
-    }
-
-    private void ThemeComboSelectedIndexChanged(object? sender, EventArgs eventArgs)
-    {
-        if (!_themeChoiceReady || _themeCombo.SelectedItem is not UiThemeOption option || option.Kind == _theme.Kind)
-        {
-            return;
-        }
-
-        try
-        {
-            UiThemeSettings.Save(option.Kind);
-            BeginInvoke(() =>
-            {
-                Application.Restart();
-                Close();
-            });
-        }
-        catch (Exception ex)
-        {
-            ShowError(T("Appearance"), ex);
-        }
-    }
-
     private static void SelectOption(ComboBox combo, string value)
     {
         foreach (var item in combo.Items)
@@ -1039,7 +1199,6 @@ public sealed class MainForm : Form
         }
 
         LoadToolChoices();
-        LoadThemeChoices();
         _adminLabel.Text = Elevation.IsAdministrator() ? T("Admin") : T("Standard");
         _adminLabel.ForeColor = Elevation.IsAdministrator() ? _accent2 : _theme.Warning;
         if (_hardware is null)
